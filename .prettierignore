@@ -1,0 +1,7 @@
+.idea
+dist
+.env
+.env.sample
+node_modules
+.husky
+package-lock.json
