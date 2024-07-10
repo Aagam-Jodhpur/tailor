@@ -1,19 +1,21 @@
-export function loadImg(srcPath) {
-  return new Promise(resolve => {
+import type { CanvasImage, OutfitConfig, OutfitGroupConfig } from './types'
+
+export function loadImg(src: string) {
+  return new Promise<CanvasImage>(resolve => {
     const img = new Image()
     img.addEventListener('load', () => {
       resolve(img)
     })
-    img.src = srcPath
+    img.src = src
   })
 }
 
-export async function loadMaskImg(srcPath) {
-  const img = await loadImg(srcPath)
+export async function loadMaskImg(src: string): Promise<CanvasImage> {
+  const img = await loadImg(src)
   return createMaskImgFromGrayscaleImg(img)
 }
 
-export function createMaskImgFromGrayscaleImg(img) {
+export function createMaskImgFromGrayscaleImg(img: CanvasImage): CanvasImage {
   const { width, height } = img
   const { canvas, ctx } = createCanvasInMemory(width, height)
   ctx.drawImage(img, 0, 0)
@@ -42,14 +44,19 @@ export function createCanvas(w = 0, h = 0) {
   return { canvas, ctx }
 }
 
-export function maximiseWithinBounds(sourceW, sourceH, maxW, maxH) {
-  const scale = Math.min(maxW / sourceW, maxH / sourceH)
-  const w = sourceW * scale
-  const h = sourceH * scale
+export function maximiseWithinBounds(
+  srcW: number,
+  srcH: number,
+  maxW: number,
+  maxH: number
+) {
+  const scale = Math.min(maxW / srcW, maxH / srcH)
+  const w = srcW * scale
+  const h = srcH * scale
   return { w, h }
 }
 
-export function getGroupCfg(outfitCfg, groupKey) {
+export function getGroupCfg(outfitCfg: OutfitConfig, groupKey: string) {
   const groupCfg = outfitCfg.groups[groupKey]
   if (!groupCfg)
     throw new Error(
@@ -58,8 +65,8 @@ export function getGroupCfg(outfitCfg, groupKey) {
   return groupCfg
 }
 
-export function getLayerCfg(groupCfg, layerKey) {
-  const layerCfg = groupCfg.textureReplacementLayers[layerKey]
+export function getLayerCfg(groupCfg: OutfitGroupConfig, layerKey: string) {
+  const layerCfg = groupCfg.layers[layerKey]
   if (!layerCfg)
     throw new Error(
       `The layer with key "${layerKey}" was not found in the config of group "${groupCfg.name}"`
@@ -67,8 +74,8 @@ export function getLayerCfg(groupCfg, layerKey) {
   return layerCfg
 }
 
-export function getTextureCfg(groupCfg, textureKey) {
-  const textureCfg = groupCfg.availableTextures[textureKey]
+export function getTextureCfg(groupCfg: OutfitGroupConfig, textureKey: string) {
+  const textureCfg = groupCfg.textures[textureKey]
   if (!textureCfg)
     throw new Error(
       `The texture with key "${textureKey}" was not found in the config of group "${groupCfg.name}"`

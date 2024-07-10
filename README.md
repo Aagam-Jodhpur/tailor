@@ -39,6 +39,9 @@ Now, the `@aagam/tailor-examples` project will use your local copy of the Tailor
 
 Launch any example and test your modifications in the browser.
 
+> **IMPORTANT**: Everytime you execute `npm i <some-package>`, the local tailor copy will be replaced automatically.
+> Thus, the command `npm run useTailor:local` should be executed after every `npm i <some-package>`
+
 If you want to use the remote version of the Tailor library again: `npm run useTailor:remote`
 
 #### Teardown
