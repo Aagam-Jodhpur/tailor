@@ -1,8 +1,8 @@
 import { createCanvas, maximiseWithinBounds } from './utils'
-import type { CanvasImage } from './types'
+import type { TCanvasImage } from './types'
 
 interface RenderItem {
-  img: CanvasImage
+  img: TCanvasImage
   transition: boolean
   transitionCounter: number
 }
@@ -111,7 +111,7 @@ export class CanvasPainter {
     })
   }
 
-  addToRenderQueue(img: CanvasImage, transition = true) {
+  addToRenderQueue(img: TCanvasImage, transition = true) {
     const renderItem: RenderItem = {
       img,
       transition,

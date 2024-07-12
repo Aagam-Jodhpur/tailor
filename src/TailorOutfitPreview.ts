@@ -1,30 +1,31 @@
+import { CanvasPainter } from './CanvasPainter'
+import { DEFAULT_TEXTURE_TILING_OPTIONS } from './constants'
+
 import {
+  createCanvas,
   createCanvasInMemory,
-  getGroupCfg,
-  getLayerCfg,
+  getLayerCfgs,
   loadImg,
   loadMaskImg,
 } from './utils'
-import { CanvasPainter } from './CanvasPainter'
+
 import type {
-  CanvasImage,
-  Ctx,
-  OutfitConfig,
-  PreviewOptions,
-  TextureTilingOptions,
+  TCanvasImage,
+  TCtx,
+  TOutfitConfig,
+  TOutfitLayerConfig,
+  TOutfitTextureConfig,
+  TPreviewOptions,
+  TTextureTilingOptions,
 } from './types'
 
-export class OutfitPreview {
-  DEFAULT_TILING_OPTIONS: Required<TextureTilingOptions> = {
-    scale: 0.2,
-    angle: 0,
-  }
-  private readonly outfitCfg: OutfitConfig
-  private assets: Record<string, CanvasImage> = {}
+export class TailorOutfitPreview {
+  private readonly outfitCfg: TOutfitConfig
+  private assets: Record<string, TCanvasImage> = {}
 
   private readonly canvasPainter: CanvasPainter
 
-  constructor(outfitCfg: OutfitConfig, rootEl: HTMLElement) {
+  constructor(outfitCfg: TOutfitConfig, rootEl: HTMLElement) {
     this.outfitCfg = outfitCfg
     const { width, height } = outfitCfg.base
     this.canvasPainter = new CanvasPainter(width, height, rootEl)
@@ -44,27 +45,18 @@ export class OutfitPreview {
     }
 
     // Load assets for each group
-    const groupCfgs = this.outfitCfg.groups
+    const groupCfgs = this.outfitCfg.groupWiseLayers
     for (const groupKey in groupCfgs) {
-      const groupCfg = groupCfgs[groupKey]
-
-      const { textures, layers } = groupCfg
-
-      // Load assets for each texture
-      for (const textureKey in textures) {
-        const textureCfg = textures[textureKey]
-        const key = `${groupKey}.texture.src.${textureKey}`
-        this.assets[key] = await loadImg(textureCfg.src)
-      }
+      const layerCfgs = groupCfgs[groupKey]
 
       // Load assets for each layer
-      for (const layerKey in layers) {
-        const layerCfg = layers[layerKey]
-        const key = `${groupKey}.layer.maskSrc.${layerKey}`
-
-        // Load layer mask
-        this.assets[key] = await loadMaskImg(layerCfg.maskSrc)
-      }
+      await Promise.all(
+        layerCfgs.map(async (layerCfg, i) => {
+          const key = `${groupKey}.layer.${i}.maskSrc`
+          // Load layer mask
+          this.assets[key] = await loadMaskImg(layerCfg.maskSrc)
+        })
+      )
     }
   }
 
@@ -72,31 +64,46 @@ export class OutfitPreview {
     this.canvasPainter.addToRenderQueue(this.assets['base.img'])
   }
 
-  drawGroupWithReplacedTexture(
+  async drawGroupWithReplacedTexture(
     groupKey: string,
-    textureKey: string,
-    previewOptions: PreviewOptions
+    textureCfg: TOutfitTextureConfig,
+    previewOptions: TPreviewOptions
   ) {
-    const groupImg = this.#createGroupImg(groupKey, textureKey, previewOptions)
+    // Get the configs for all layers in this group
+    const layerCfgs = getLayerCfgs(this.outfitCfg, groupKey)
+    const groupImg = await this.#createGroupImg(
+      groupKey,
+      layerCfgs,
+      textureCfg,
+      previewOptions
+    )
     this.canvasPainter.addToRenderQueue(groupImg)
   }
 
-  eraseGroup(groupKey: string) {
-    const groupImg = this.#createGroupImgWithBaseImg(groupKey)
+  async eraseGroup(groupKey: string) {
+    const layerCfgs = getLayerCfgs(this.outfitCfg, groupKey)
+    const groupImg = await this.#createGroupImgWithBaseImg(groupKey, layerCfgs)
     this.canvasPainter.addToRenderQueue(groupImg)
   }
 
-  #createGroupImg(
+  async #createGroupImg(
     groupKey: string,
-    textureKey: string,
-    previewOptions: PreviewOptions
+    layerCfgs: TOutfitLayerConfig[],
+    textureCfg: TOutfitTextureConfig,
+    previewOptions: TPreviewOptions
   ) {
-    // Get the group config
-    const groupCfg = getGroupCfg(this.outfitCfg, groupKey)
-
     // Create each layer
-    const layerImgs = Object.keys(groupCfg.layers).map(layerKey =>
-      this.#createLayerImg(groupKey, layerKey, textureKey, previewOptions)
+    const layerImgs = await Promise.all(
+      layerCfgs.map(
+        async (layerCfg, layerIdx) =>
+          await this.#createLayerImg(
+            groupKey,
+            layerIdx,
+            layerCfg,
+            textureCfg,
+            previewOptions
+          )
+      )
     )
 
     // Create a temporary off-screen canvas for the group
@@ -111,13 +118,16 @@ export class OutfitPreview {
     return canvas
   }
 
-  #createGroupImgWithBaseImg(groupKey: string) {
-    // Get the group config
-    const groupCfg = getGroupCfg(this.outfitCfg, groupKey)
-
+  async #createGroupImgWithBaseImg(
+    groupKey: string,
+    layerCfgs: TOutfitLayerConfig[]
+  ) {
     // Create each layer
-    const layerImgs = Object.keys(groupCfg.layers).map(layerKey =>
-      this.#createLayerImgWithBaseImg(groupKey, layerKey)
+    const layerImgs = await Promise.all(
+      layerCfgs.map(
+        async (layerCfg, layerIdx) =>
+          await this.#createLayerImgWithBaseImg(groupKey, layerIdx)
+      )
     )
 
     // Create a temporary off-screen canvas for the group
@@ -132,18 +142,17 @@ export class OutfitPreview {
     return canvas
   }
 
-  #createLayerImg(
+  async #createLayerImg(
     groupKey: string,
-    layerKey: string,
-    textureKey: string,
-    previewOptions: PreviewOptions
+    layerIdx: number,
+    layerCfg: TOutfitLayerConfig,
+    textureCfg: TOutfitTextureConfig,
+    previewOptions: TPreviewOptions
   ) {
-    const groupCfg = getGroupCfg(this.outfitCfg, groupKey)
-    const layerCfg = getLayerCfg(groupCfg, layerKey)
-
     // Create a temporary off-screen canvas for this layer
     const { w, h } = this.canvasPainter
-    const { canvas, ctx } = createCanvasInMemory(w, h)
+    // const { canvas, ctx } = createCanvasInMemory(w, h)
+    const { canvas, ctx } = createCanvas(w, h)
 
     // Draw the enhanced base image
     const enhancedBaseImg = this.assets['base.enhancedImg']
@@ -151,23 +160,27 @@ export class OutfitPreview {
     ctx.globalCompositeOperation = 'multiply'
 
     // Tiling the texture
-    const tilingOptions: Required<TextureTilingOptions> = {
-      ...this.DEFAULT_TILING_OPTIONS,
+    // Load the texture
+    const textureImg = await loadImg(textureCfg.src)
+    // Create tiling properties
+    const tilingOptions: Required<TTextureTilingOptions> = {
+      ...DEFAULT_TEXTURE_TILING_OPTIONS,
       ...layerCfg.textureTilingOptions,
     }
-    const textureAssetKey = `${groupKey}.texture.src.${textureKey}`
-    const textureImg = this.assets[textureAssetKey]
+    // Do the tiling
     this.#tileTexture(ctx, w, h, textureImg, tilingOptions, previewOptions)
 
     // Applying a mask
-    const maskAssetKey = `${groupKey}.layer.maskSrc.${layerKey}`
+    // Get the layer assets from the asset store
+    const maskAssetKey = `${groupKey}.layer.${layerIdx}.maskSrc`
     const maskImg = this.assets[maskAssetKey]
+    // Do the masking
     this.#applyMask(ctx, maskImg, 0, 0, w, h)
 
     return canvas
   }
 
-  #createLayerImgWithBaseImg(groupKey: string, layerKey: string) {
+  async #createLayerImgWithBaseImg(groupKey: string, layerIdx: number) {
     // Create a temporary off-screen canvas for this layer
     const { w, h } = this.canvasPainter
     const { canvas, ctx } = createCanvasInMemory(w, h)
@@ -178,7 +191,7 @@ export class OutfitPreview {
     ctx.globalCompositeOperation = 'multiply'
 
     // Applying a mask
-    const maskAssetKey = `${groupKey}.layer.maskSrc.${layerKey}`
+    const maskAssetKey = `${groupKey}.layer.${layerIdx}.maskSrc`
     const maskImg = this.assets[maskAssetKey]
     this.#applyMask(ctx, maskImg, 0, 0, w, h)
 
@@ -186,8 +199,8 @@ export class OutfitPreview {
   }
 
   #applyMask(
-    ctx: Ctx,
-    maskImg: CanvasImage,
+    ctx: TCtx,
+    maskImg: TCanvasImage,
     x: number,
     y: number,
     w: number,
@@ -200,12 +213,12 @@ export class OutfitPreview {
   }
 
   #tileTexture(
-    ctx: Ctx,
+    ctx: TCtx,
     w: number,
     h: number,
-    textureImg: CanvasImage,
-    tilingOptions: Required<TextureTilingOptions>,
-    previewOptions: PreviewOptions
+    textureImg: TCanvasImage,
+    tilingOptions: Required<TTextureTilingOptions>,
+    previewOptions: TPreviewOptions
   ) {
     const tW = textureImg.width
     const tH = textureImg.height

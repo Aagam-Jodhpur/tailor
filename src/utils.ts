@@ -1,21 +1,24 @@
-import type { CanvasImage, OutfitConfig, OutfitGroupConfig } from './types'
+import type { TCanvasImage, TOutfitConfig } from './types'
 
 export function loadImg(src: string) {
-  return new Promise<CanvasImage>(resolve => {
+  return new Promise<TCanvasImage>(resolve => {
     const img = new Image()
     img.addEventListener('load', () => {
       resolve(img)
+    })
+    img.addEventListener('error', err => {
+      console.error(err, err.message)
     })
     img.src = src
   })
 }
 
-export async function loadMaskImg(src: string): Promise<CanvasImage> {
+export async function loadMaskImg(src: string): Promise<TCanvasImage> {
   const img = await loadImg(src)
   return createMaskImgFromGrayscaleImg(img)
 }
 
-export function createMaskImgFromGrayscaleImg(img: CanvasImage): CanvasImage {
+export function createMaskImgFromGrayscaleImg(img: TCanvasImage): TCanvasImage {
   const { width, height } = img
   const { canvas, ctx } = createCanvasInMemory(width, height)
   ctx.drawImage(img, 0, 0)
@@ -56,29 +59,11 @@ export function maximiseWithinBounds(
   return { w, h }
 }
 
-export function getGroupCfg(outfitCfg: OutfitConfig, groupKey: string) {
-  const groupCfg = outfitCfg.groups[groupKey]
-  if (!groupCfg)
+export function getLayerCfgs(outfitCfg: TOutfitConfig, groupKey: string) {
+  const layerCfgs = outfitCfg.groupWiseLayers[groupKey]
+  if (!layerCfgs)
     throw new Error(
-      `The group with key "${groupKey}" was not found in the config of outfit "${outfitCfg.name}"`
+      `The group with key "${groupKey}" was not found in the given outfit config`
     )
-  return groupCfg
-}
-
-export function getLayerCfg(groupCfg: OutfitGroupConfig, layerKey: string) {
-  const layerCfg = groupCfg.layers[layerKey]
-  if (!layerCfg)
-    throw new Error(
-      `The layer with key "${layerKey}" was not found in the config of group "${groupCfg.name}"`
-    )
-  return layerCfg
-}
-
-export function getTextureCfg(groupCfg: OutfitGroupConfig, textureKey: string) {
-  const textureCfg = groupCfg.textures[textureKey]
-  if (!textureCfg)
-    throw new Error(
-      `The texture with key "${textureKey}" was not found in the config of group "${groupCfg.name}"`
-    )
-  return textureCfg
+  return layerCfgs
 }

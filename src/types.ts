@@ -1,42 +1,38 @@
-export type Canvas = HTMLCanvasElement | OffscreenCanvas
-export type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
-export type CanvasImage = HTMLImageElement | HTMLCanvasElement | OffscreenCanvas
+export type TCanvas = HTMLCanvasElement | OffscreenCanvas
 
-export interface OutfitConfig {
-  name: string
-  base: OutfitBaseConfig
-  groups: Record<string, OutfitGroupConfig>
+export type TCtx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+
+export type TCanvasImage =
+  | HTMLImageElement
+  | HTMLCanvasElement
+  | OffscreenCanvas
+
+export interface TOutfitConfig {
+  base: TOutfitBaseConfig
+  groupWiseLayers: Record<string, TOutfitLayerConfig[]>
 }
 
-export interface OutfitBaseConfig {
+export interface TOutfitBaseConfig {
   width: number
   height: number
   img: string
   enhancedImg: string
 }
 
-export interface OutfitGroupConfig {
-  name: string
-  textures: Record<string, OutfitTextureConfig>
-  layers: Record<string, OutfitLayerConfig>
-}
-
-export interface OutfitTextureConfig {
-  name: string
-  src: string
-}
-
-export interface OutfitLayerConfig {
-  name: string
+export interface TOutfitLayerConfig {
   maskSrc: string
-  textureTilingOptions?: TextureTilingOptions
+  textureTilingOptions?: TTextureTilingOptions
 }
 
-export interface TextureTilingOptions {
+export interface TTextureTilingOptions {
   scale?: number
   angle?: number
 }
 
-export interface PreviewOptions {
+export interface TOutfitTextureConfig {
+  src: string
+}
+
+export interface TPreviewOptions {
   textureScale: number
 }

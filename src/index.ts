@@ -1,31 +1,29 @@
-import { OutfitPreview } from './OutfitPreview'
+import { TailorOutfitPreview } from './TailorOutfitPreview'
 import type {
-  OutfitConfig,
-  OutfitGroupConfig,
-  OutfitTextureConfig,
-  OutfitBaseConfig,
-  OutfitLayerConfig,
-  TextureTilingOptions,
-  PreviewOptions,
+  TOutfitConfig,
+  TOutfitTextureConfig,
+  TOutfitBaseConfig,
+  TOutfitLayerConfig,
+  TTextureTilingOptions,
+  TPreviewOptions,
 } from './types'
 
 export async function createOutfitPreview(
-  outfitCfg: OutfitConfig,
+  outfitCfg: TOutfitConfig,
   rootEl: HTMLElement
 ) {
-  const outfitPreview = new OutfitPreview(outfitCfg, rootEl)
+  const outfitPreview = new TailorOutfitPreview(outfitCfg, rootEl)
   await outfitPreview.init()
   return outfitPreview
 }
 
 // Exporting all public types
 export type {
-  OutfitPreview,
-  OutfitConfig,
-  OutfitGroupConfig,
-  OutfitTextureConfig,
-  OutfitBaseConfig,
-  OutfitLayerConfig,
-  TextureTilingOptions,
-  PreviewOptions,
+  TailorOutfitPreview,
+  TOutfitConfig,
+  TOutfitTextureConfig,
+  TOutfitBaseConfig,
+  TOutfitLayerConfig,
+  TTextureTilingOptions,
+  TPreviewOptions,
 }
