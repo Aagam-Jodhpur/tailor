@@ -1,6 +1,6 @@
-import type { TCanvasImage, TOutfitConfig } from './types'
+import type { TCanvasImage, TProcessedOutfitConfig } from './types'
 
-export function loadImg(src: string) {
+export function loadImgAsTCanvasImage(src: string) {
   return new Promise<TCanvasImage>(resolve => {
     const img = new Image()
     img.addEventListener('load', () => {
@@ -13,9 +13,30 @@ export function loadImg(src: string) {
   })
 }
 
-export async function loadMaskImg(src: string): Promise<TCanvasImage> {
-  const img = await loadImg(src)
+export function loadImg(src: string) {
+  return new Promise<ImageBitmap>(resolve => {
+    const img = new Image()
+    img.addEventListener('load', () => {
+      resolve(createImageBitmap(img))
+    })
+    img.addEventListener('error', err => {
+      console.error(err, err.message)
+      console.log(`trying to load src ${src}`)
+    })
+    img.src = src
+  })
+}
+
+export async function loadMaskImgAsTCanvasImage(
+  src: string
+): Promise<TCanvasImage> {
+  const img = await loadImgAsTCanvasImage(src)
   return createMaskImgFromGrayscaleImg(img)
+}
+
+export async function loadMaskImg(src: string): Promise<ImageBitmap> {
+  const img = await loadImgAsTCanvasImage(src)
+  return createImageBitmap(createMaskImgFromGrayscaleImg(img))
 }
 
 export function createMaskImgFromGrayscaleImg(img: TCanvasImage): TCanvasImage {
@@ -59,7 +80,10 @@ export function maximiseWithinBounds(
   return { w, h }
 }
 
-export function getLayerCfgs(outfitCfg: TOutfitConfig, groupKey: string) {
+export function getLayerCfgs(
+  outfitCfg: TProcessedOutfitConfig,
+  groupKey: string
+) {
   const layerCfgs = outfitCfg.groupWiseLayers[groupKey]
   if (!layerCfgs)
     throw new Error(

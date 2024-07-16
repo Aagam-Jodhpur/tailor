@@ -1,7 +1,7 @@
 import { TailorOutfitPreview } from './TailorOutfitPreview'
 import type {
   TOutfitConfig,
-  TOutfitTextureConfig,
+  TTextureConfig,
   TOutfitBaseConfig,
   TOutfitLayerConfig,
   TTextureTilingOptions,
@@ -12,8 +12,8 @@ export async function createOutfitPreview(
   outfitCfg: TOutfitConfig,
   rootEl: HTMLElement
 ) {
-  const outfitPreview = new TailorOutfitPreview(outfitCfg, rootEl)
-  await outfitPreview.init()
+  const outfitPreview = new TailorOutfitPreview()
+  await outfitPreview.init(outfitCfg, rootEl)
   return outfitPreview
 }
 
@@ -21,7 +21,7 @@ export async function createOutfitPreview(
 export type {
   TailorOutfitPreview,
   TOutfitConfig,
-  TOutfitTextureConfig,
+  TTextureConfig,
   TOutfitBaseConfig,
   TOutfitLayerConfig,
   TTextureTilingOptions,
