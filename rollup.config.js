@@ -11,8 +11,6 @@ import dts from 'rollup-plugin-dts'
 
 //===================================<  Files  >================================
 const input = 'src/index.ts'
-const umdGlobalName = 'Tailor'
-const umdOutput = pkg.main.slice(0, -2) + 'umd.js'
 
 //=========================<  Dynamic config properties  >======================
 let plugins = [typescript()]
@@ -24,17 +22,10 @@ export default [
   {
     input,
     plugins,
-    output: [
-      {
-        file: pkg.main,
-        format: 'esm',
-      },
-      {
-        name: umdGlobalName,
-        file: umdOutput,
-        format: 'umd',
-      },
-    ],
+    output: {
+      file: pkg.main,
+      format: 'esm',
+    },
   },
   // Type declarations
   {
