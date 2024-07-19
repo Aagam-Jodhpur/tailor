@@ -1,4 +1,13 @@
 import { CanvasPainter } from './CanvasPainter/CanvasPainter'
+import { TError } from './TError'
+
+import {
+  createCanvasInMemory,
+  getLayerCfgs,
+  loadImg,
+  loadMaskImg,
+} from './common/utils'
+
 import {
   DEFAULT_PREVIEW_OPTIONS,
   DEFAULT_TEXTURE_TILING_OPTIONS,
@@ -23,12 +32,21 @@ import type {
   TTransition,
 } from './common/types'
 
-import {
-  createCanvasInMemory,
-  getLayerCfgs,
-  loadImg,
-  loadMaskImg,
-} from './common/utils'
+export class TInitError extends TError {
+  constructor(cause?: Error) {
+    const msg = 'Tailor could not be initialized properly'
+    super(msg, cause)
+    this.name = 'InitError'
+  }
+}
+
+export class TOpError extends TError {
+  constructor(op: string, cause?: Error) {
+    const msg = `Tailor could not perform operation: ${op}`
+    super(msg, cause)
+    this.name = 'OpError'
+  }
+}
 
 export class TailorOutfitPreview {
   private ready: boolean
@@ -37,28 +55,44 @@ export class TailorOutfitPreview {
   private previewOptions: TProcessedPreviewOptions
 
   constructor(previewOptions?: TPreviewOptions) {
-    this.ready = false
-    this.canvasPainter = null
-    this.outfitCfg = null
-    this.previewOptions = this.processPreviewOptions(previewOptions)
+    try {
+      this.ready = false
+      this.canvasPainter = null
+      this.outfitCfg = null
+      this.previewOptions = this.processPreviewOptions(previewOptions)
+    } catch (e) {
+      if (e instanceof Error) {
+        const err = new TInitError(e)
+        err.log()
+        throw err
+      } else throw e
+    }
   }
 
   async init(cfg: TOutfitConfig, rootEl: HTMLElement) {
-    if (this.ready) throw new Error(`The class is already initialized`)
+    try {
+      if (this.ready) throw new TError(`The class is already initialized`)
 
-    this.outfitCfg = await this.processOutfitConfig(cfg)
+      this.outfitCfg = await this.processOutfitConfig(cfg)
 
-    const { width, height } = cfg.base
-    this.canvasPainter = new CanvasPainter(width, height, rootEl)
+      const { width, height } = cfg.base
+      this.canvasPainter = new CanvasPainter(width, height, rootEl)
 
-    // Draw the outfit base image
-    await this.canvasPainter.addRenderItem(
-      'base',
-      this.outfitCfg.base.img,
-      this.previewOptions.transitionOptions
-    )
+      // Draw the outfit base image
+      await this.canvasPainter.addRenderItem(
+        'base',
+        this.outfitCfg.base.img,
+        this.previewOptions.transitionOptions
+      )
 
-    this.ready = true
+      this.ready = true
+    } catch (e) {
+      if (e instanceof Error) {
+        const err = new TInitError(e)
+        err.log()
+        throw err
+      } else throw e
+    }
   }
 
   private async processOutfitConfig(cfg: TOutfitConfig) {
@@ -118,7 +152,7 @@ export class TailorOutfitPreview {
       let entry: TTransition
       if (options.transitionOptions.entry) {
         entry = TRANSITION_MAP[options.transitionOptions.entry]
-        if (!entry) throw new Error(`Transition option "entry" is invalid`)
+        if (!entry) throw new TError(`Transition option "entry" is invalid`)
       } else {
         entry = baseOptions.transitionOptions.entry
       }
@@ -126,7 +160,7 @@ export class TailorOutfitPreview {
       let exit: TTransition
       if (options.transitionOptions.exit) {
         exit = TRANSITION_MAP[options.transitionOptions.exit]
-        if (!exit) throw new Error(`Transition option "exit" is invalid`)
+        if (!exit) throw new TError(`Transition option "exit" is invalid`)
       } else {
         exit = baseOptions.transitionOptions.exit
       }
@@ -135,7 +169,7 @@ export class TailorOutfitPreview {
       if (options.transitionOptions.timingFn) {
         timingFn = TIMING_FN_MAP[options.transitionOptions.timingFn]
         if (!timingFn)
-          throw new Error(`Transition option "timingFn" is invalid`)
+          throw new TError(`Transition option "timingFn" is invalid`)
       } else {
         timingFn = baseOptions.transitionOptions.timingFn
       }
@@ -146,7 +180,7 @@ export class TailorOutfitPreview {
           options.transitionOptions.speed < 0 ||
           options.transitionOptions.speed > 1
         )
-          throw new Error(`Transition option "speed" is invalid`)
+          throw new TError(`Transition option "speed" is invalid`)
         speed = options.transitionOptions.speed
       } else {
         speed = baseOptions.transitionOptions.speed
@@ -177,44 +211,66 @@ export class TailorOutfitPreview {
   }
 
   async applyTextureOnGroup(groupKey: string, textureCfg: TTextureConfig) {
-    if (!this.ready) throw new Error(`Already processing a request`)
-    if (!this.canvasPainter) throw new Error(`Canvas painter not initialized`)
-    if (!this.outfitCfg) throw new Error(`Outfit config not initialized`)
+    try {
+      if (!this.ready)
+        throw new TError(
+          `Tailor is already processing a previous operation. Wait for it to finish.`
+        )
+      if (!this.canvasPainter)
+        throw new TError(`Canvas painter not initialized`)
+      if (!this.outfitCfg) throw new TError(`Outfit config not initialized`)
 
-    this.ready = false
+      this.ready = false
 
-    // Process the texture config
-    const processedTextureCfg = await this.processTextureConfig(textureCfg)
+      // Process the texture config
+      const processedTextureCfg = await this.processTextureConfig(textureCfg)
 
-    // Create group image
-    const layerCfgs = getLayerCfgs(this.outfitCfg, groupKey)
-    const groupImg = await this.#createGroupImg(
-      this.outfitCfg.base,
-      layerCfgs,
-      processedTextureCfg
-    )
+      // Create group image
+      const layerCfgs = getLayerCfgs(this.outfitCfg, groupKey)
+      const groupImg = await this.#createGroupImg(
+        this.outfitCfg.base,
+        layerCfgs,
+        processedTextureCfg
+      )
 
-    await this.canvasPainter.addRenderItem(
-      groupKey,
-      groupImg,
-      this.previewOptions.transitionOptions
-    )
+      await this.canvasPainter.addRenderItem(
+        groupKey,
+        groupImg,
+        this.previewOptions.transitionOptions
+      )
 
-    this.ready = true
+      this.ready = true
+    } catch (e) {
+      if (e instanceof Error) {
+        const err = new TOpError('applyTextureOnGroup', e)
+        err.log()
+        throw err
+      } else throw e
+    }
   }
 
   async removeTextureOnGroup(groupKey: string) {
-    if (!this.ready) throw new Error(`Already processing a request`)
-    if (!this.canvasPainter) throw new Error(`Canvas painter not initialized`)
-    if (!this.outfitCfg) throw new Error(`Outfit config not initialized`)
-
-    this.ready = false
-
     try {
-      await this.canvasPainter.removeRenderItem(groupKey)
-    } catch (err) {}
+      if (!this.ready)
+        throw new TError(
+          `Tailor is already processing a previous operation. Wait for it to finish.`
+        )
+      if (!this.canvasPainter)
+        throw new TError(`Canvas painter not initialized`)
+      if (!this.outfitCfg) throw new TError(`Outfit config not initialized`)
 
-    this.ready = true
+      this.ready = false
+
+      await this.canvasPainter.removeRenderItem(groupKey)
+
+      this.ready = true
+    } catch (e) {
+      if (e instanceof Error) {
+        const err = new TOpError('removeTextureOnGroup', e)
+        err.log()
+        throw err
+      } else throw e
+    }
   }
 
   async #createGroupImg(

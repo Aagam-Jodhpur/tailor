@@ -1,3 +1,4 @@
+import { TError } from '../TError'
 import type { TCanvasImage, TProcessedOutfitConfig } from './types'
 
 export function loadImgAsTCanvasImage(src: string) {
@@ -14,15 +15,12 @@ export function loadImgAsTCanvasImage(src: string) {
 }
 
 export function loadImg(src: string) {
-  return new Promise<ImageBitmap>(resolve => {
+  return new Promise<ImageBitmap>((resolve, reject) => {
     const img = new Image()
-    img.addEventListener('load', () => {
-      resolve(createImageBitmap(img))
-    })
-    img.addEventListener('error', err => {
-      console.error(err, err.message)
-      console.log(`trying to load src ${src}`)
-    })
+    img.addEventListener('load', () => resolve(createImageBitmap(img)))
+    img.addEventListener('error', e =>
+      reject(new TError(`Failed to load image: ${src}`, e.error))
+    )
     img.src = src
   })
 }
@@ -35,8 +33,29 @@ export async function loadMaskImgAsTCanvasImage(
 }
 
 export async function loadMaskImg(src: string): Promise<ImageBitmap> {
-  const img = await loadImgAsTCanvasImage(src)
-  return createImageBitmap(createMaskImgFromGrayscaleImg(img))
+  try {
+    const img = await loadImg(src)
+    return await createMask(img)
+  } catch (e) {
+    if (e instanceof Error)
+      throw new TError(`Failed to load mask image: ${src}`, e)
+    else throw new TError(`Failed to load mask image: ${src}`)
+  }
+}
+
+export async function createMask(img: ImageBitmap) {
+  const { width, height } = img
+  const { canvas, ctx } = createCanvasInMemory(width, height)
+  ctx.drawImage(img, 0, 0)
+  let maskImgData = ctx.getImageData(0, 0, width, height)
+  let i = 0
+  while (i < maskImgData.data.length) {
+    let rgb =
+      maskImgData.data[i++] + maskImgData.data[i++] + maskImgData.data[i++]
+    maskImgData.data[i++] = rgb / 3
+  }
+  ctx.putImageData(maskImgData, 0, 0)
+  return await createImageBitmap(canvas)
 }
 
 export function createMaskImgFromGrayscaleImg(img: TCanvasImage): TCanvasImage {
@@ -86,8 +105,8 @@ export function getLayerCfgs(
 ) {
   const layerCfgs = outfitCfg.groupWiseLayers[groupKey]
   if (!layerCfgs)
-    throw new Error(
-      `The group with key "${groupKey}" was not found in the given outfit config`
+    throw new TError(
+      `The group with key "${groupKey}" was not found in the outfit config`
     )
   return layerCfgs
 }

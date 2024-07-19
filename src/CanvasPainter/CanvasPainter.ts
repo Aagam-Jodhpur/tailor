@@ -1,3 +1,4 @@
+import { TError } from '../TError'
 import { RenderItem, TransitionCompleteEvent } from './RenderItem'
 import { createCanvas, maximiseWithinBounds } from '../common/utils'
 import type {
@@ -72,12 +73,17 @@ export class CanvasPainter {
     img: TCanvasImage,
     transitionOptions: TProcessedTransitionOptions
   ) {
-    return new Promise((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       const itemExists = this.renderMap.has(key)
       const item =
         this.renderMap.get(key) ?? new RenderItem(img, transitionOptions)
 
-      if (itemExists && !item.transitionComplete()) reject()
+      if (itemExists && !item.transitionComplete())
+        reject(
+          new TError(
+            `CanvasPainter is still transitioning render item with key ${key}. Wait for the transition to finish.`
+          )
+        )
 
       item.addEventListener(TransitionCompleteEvent.name, _ => resolve(), {
         once: true,
@@ -88,7 +94,7 @@ export class CanvasPainter {
   }
 
   removeRenderItem(key: string) {
-    return new Promise((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       const item = this.renderMap.get(key)
       if (item) {
         item.addEventListener(
@@ -103,7 +109,11 @@ export class CanvasPainter {
         )
         item.triggerExit()
       } else {
-        reject()
+        reject(
+          new TError(
+            `CanvasPainter does not have a render item with key ${key}`
+          )
+        )
       }
     })
   }
