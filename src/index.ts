@@ -1,4 +1,5 @@
 import { TailorOutfitPreview } from './TailorOutfitPreview'
+import { TTimingFnName, TTransitionName } from './common/constants'
 import type {
   TOutfitConfig,
   TTextureConfig,
@@ -6,16 +7,21 @@ import type {
   TOutfitLayerConfig,
   TTextureTilingOptions,
   TPreviewOptions,
-} from './types'
+  TTransitionOptions,
+} from './common/types'
 
 export async function createOutfitPreview(
   outfitCfg: TOutfitConfig,
-  rootEl: HTMLElement
+  rootEl: HTMLElement,
+  previewOptions?: TPreviewOptions
 ) {
-  const outfitPreview = new TailorOutfitPreview()
+  const outfitPreview = new TailorOutfitPreview(previewOptions)
   await outfitPreview.init(outfitCfg, rootEl)
   return outfitPreview
 }
+
+// Exporting enums
+export { TTransitionName, TTimingFnName }
 
 // Exporting all public types
 export type {
@@ -26,4 +32,5 @@ export type {
   TOutfitLayerConfig,
   TTextureTilingOptions,
   TPreviewOptions,
+  TTransitionOptions,
 }

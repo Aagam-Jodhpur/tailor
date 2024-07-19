@@ -1,5 +1,11 @@
-import { CanvasPainter } from './CanvasPainter'
-import { DEFAULT_TEXTURE_TILING_OPTIONS } from './constants'
+import { CanvasPainter } from './CanvasPainter/CanvasPainter'
+import {
+  DEFAULT_PREVIEW_OPTIONS,
+  DEFAULT_TEXTURE_TILING_OPTIONS,
+  TRANSITION_MAP,
+  TIMING_FN_MAP,
+  DEFAULT_TEXTURE_SCALE,
+} from './common/constants'
 
 import type {
   TCtx,
@@ -8,34 +14,51 @@ import type {
   TProcessedOutfitBaseConfig,
   TProcessedOutfitConfig,
   TProcessedOutfitLayerConfig,
+  TProcessedPreviewOptions,
   TProcessedTextureConfig,
   TProcessedTextureTilingOptions,
+  TProcessedTransitionOptions,
   TTextureConfig,
-} from './types'
+  TTimingFn,
+  TTransition,
+} from './common/types'
 
 import {
   createCanvasInMemory,
   getLayerCfgs,
   loadImg,
   loadMaskImg,
-} from './utils'
+} from './common/utils'
 
 export class TailorOutfitPreview {
+  private ready: boolean
   private canvasPainter: CanvasPainter | null
   private outfitCfg: TProcessedOutfitConfig | null
+  private previewOptions: TProcessedPreviewOptions
 
-  constructor() {
+  constructor(previewOptions?: TPreviewOptions) {
+    this.ready = false
     this.canvasPainter = null
     this.outfitCfg = null
+    this.previewOptions = this.processPreviewOptions(previewOptions)
   }
 
   async init(cfg: TOutfitConfig, rootEl: HTMLElement) {
+    if (this.ready) throw new Error(`The class is already initialized`)
+
     this.outfitCfg = await this.processOutfitConfig(cfg)
 
     const { width, height } = cfg.base
     this.canvasPainter = new CanvasPainter(width, height, rootEl)
 
-    this.drawOutfitBaseImg()
+    // Draw the outfit base image
+    await this.canvasPainter.addRenderItem(
+      'base',
+      this.outfitCfg.base.img,
+      this.previewOptions.transitionOptions
+    )
+
+    this.ready = true
   }
 
   private async processOutfitConfig(cfg: TOutfitConfig) {
@@ -79,23 +102,86 @@ export class TailorOutfitPreview {
   private async processTextureConfig(cfg: TTextureConfig) {
     const processedTextureCfg: TProcessedTextureConfig = {
       img: await loadImg(cfg.imgSrc),
+      scale: cfg.scale ?? DEFAULT_TEXTURE_SCALE,
     }
     return processedTextureCfg
   }
 
-  drawOutfitBaseImg() {
-    if (!this.canvasPainter) throw new Error(`Canvas painter not initialized`)
-    if (!this.outfitCfg) throw new Error(`Outfit config not initialized`)
-    this.canvasPainter.addToRenderQueue(this.outfitCfg.base.img)
+  private processPreviewOptions(
+    options?: TPreviewOptions,
+    baseOptions = DEFAULT_PREVIEW_OPTIONS
+  ) {
+    if (!options) return baseOptions
+
+    let transitionOptions: TProcessedTransitionOptions
+    if (options.transitionOptions) {
+      let entry: TTransition
+      if (options.transitionOptions.entry) {
+        entry = TRANSITION_MAP[options.transitionOptions.entry]
+        if (!entry) throw new Error(`Transition option "entry" is invalid`)
+      } else {
+        entry = baseOptions.transitionOptions.entry
+      }
+
+      let exit: TTransition
+      if (options.transitionOptions.exit) {
+        exit = TRANSITION_MAP[options.transitionOptions.exit]
+        if (!exit) throw new Error(`Transition option "exit" is invalid`)
+      } else {
+        exit = baseOptions.transitionOptions.exit
+      }
+
+      let timingFn: TTimingFn
+      if (options.transitionOptions.timingFn) {
+        timingFn = TIMING_FN_MAP[options.transitionOptions.timingFn]
+        if (!timingFn)
+          throw new Error(`Transition option "timingFn" is invalid`)
+      } else {
+        timingFn = baseOptions.transitionOptions.timingFn
+      }
+
+      let speed: number
+      if (options.transitionOptions.speed) {
+        if (
+          options.transitionOptions.speed < 0 ||
+          options.transitionOptions.speed > 1
+        )
+          throw new Error(`Transition option "speed" is invalid`)
+        speed = options.transitionOptions.speed
+      } else {
+        speed = baseOptions.transitionOptions.speed
+      }
+
+      transitionOptions = {
+        entry,
+        exit,
+        timingFn,
+        speed,
+      }
+    } else {
+      transitionOptions = baseOptions.transitionOptions
+    }
+
+    const processedPreviewOptions: TProcessedPreviewOptions = {
+      transitionOptions,
+    }
+
+    return processedPreviewOptions
   }
 
-  async drawGroupWithReplacedTexture(
-    groupKey: string,
-    textureCfg: TTextureConfig,
-    previewOptions: TPreviewOptions
-  ) {
+  setPreviewOptions(options: TPreviewOptions) {
+    this.previewOptions = this.processPreviewOptions(
+      options,
+      this.previewOptions
+    )
+  }
+
+  async applyTextureOnGroup(groupKey: string, textureCfg: TTextureConfig) {
+    if (!this.ready) throw new Error(`Already processing a request`)
     if (!this.canvasPainter) throw new Error(`Canvas painter not initialized`)
     if (!this.outfitCfg) throw new Error(`Outfit config not initialized`)
+
+    this.ready = false
 
     // Process the texture config
     const processedTextureCfg = await this.processTextureConfig(textureCfg)
@@ -105,61 +191,43 @@ export class TailorOutfitPreview {
     const groupImg = await this.#createGroupImg(
       this.outfitCfg.base,
       layerCfgs,
-      processedTextureCfg,
-      previewOptions
+      processedTextureCfg
     )
-    this.canvasPainter.addToRenderQueue(groupImg)
+
+    await this.canvasPainter.addRenderItem(
+      groupKey,
+      groupImg,
+      this.previewOptions.transitionOptions
+    )
+
+    this.ready = true
   }
 
-  eraseGroup(groupKey: string) {
+  async removeTextureOnGroup(groupKey: string) {
+    if (!this.ready) throw new Error(`Already processing a request`)
     if (!this.canvasPainter) throw new Error(`Canvas painter not initialized`)
     if (!this.outfitCfg) throw new Error(`Outfit config not initialized`)
-    const layerCfgs = getLayerCfgs(this.outfitCfg, groupKey)
-    const groupImg = this.#createGroupImgWithBaseImg(
-      this.outfitCfg.base,
-      layerCfgs
-    )
-    this.canvasPainter.addToRenderQueue(groupImg)
+
+    this.ready = false
+
+    try {
+      await this.canvasPainter.removeRenderItem(groupKey)
+    } catch (err) {}
+
+    this.ready = true
   }
 
   async #createGroupImg(
     baseCfg: TProcessedOutfitBaseConfig,
     layerCfgs: TProcessedOutfitLayerConfig[],
-    textureCfg: TProcessedTextureConfig,
-    previewOptions: TPreviewOptions
+    textureCfg: TProcessedTextureConfig
   ) {
     // Create each layer
     const layerImgs = await Promise.all(
       layerCfgs.map(
         async layerCfg =>
-          await this.#createLayerImg(
-            baseCfg,
-            layerCfg,
-            textureCfg,
-            previewOptions
-          )
+          await this.#createLayerImg(baseCfg, layerCfg, textureCfg)
       )
-    )
-
-    // Create a temporary off-screen canvas for the group
-    const { w, h } = this.canvasPainter
-    const { canvas, ctx } = createCanvasInMemory(w, h)
-
-    // Compose all layers
-    layerImgs.forEach(layerImg => {
-      ctx.drawImage(layerImg, 0, 0, w, h)
-    })
-
-    return canvas
-  }
-
-  #createGroupImgWithBaseImg(
-    baseCfg: TProcessedOutfitBaseConfig,
-    layerCfgs: TProcessedOutfitLayerConfig[]
-  ) {
-    // Create each layer
-    const layerImgs = layerCfgs.map(layerCfg =>
-      this.#createLayerImgWithBaseImg(baseCfg, layerCfg)
     )
 
     // Create a temporary off-screen canvas for the group
@@ -177,8 +245,7 @@ export class TailorOutfitPreview {
   async #createLayerImg(
     baseCfg: TProcessedOutfitBaseConfig,
     layerCfg: TProcessedOutfitLayerConfig,
-    textureCfg: TProcessedTextureConfig,
-    previewOptions: TPreviewOptions
+    textureCfg: TProcessedTextureConfig
   ) {
     // Create a temporary off-screen canvas for this layer
     const { w, h } = this.canvasPainter
@@ -195,26 +262,8 @@ export class TailorOutfitPreview {
       h,
       textureCfg.img,
       layerCfg.textureTilingOptions,
-      previewOptions
+      textureCfg.scale
     )
-
-    // Applying a mask
-    this.#applyMask(ctx, layerCfg.maskImg, 0, 0, w, h)
-
-    return canvas
-  }
-
-  #createLayerImgWithBaseImg(
-    baseCfg: TProcessedOutfitBaseConfig,
-    layerCfg: TProcessedOutfitLayerConfig
-  ) {
-    // Create a temporary off-screen canvas for this layer
-    const { w, h } = this.canvasPainter
-    const { canvas, ctx } = createCanvasInMemory(w, h)
-
-    // Draw the base image
-    ctx.drawImage(baseCfg.img, 0, 0, w, h)
-    ctx.globalCompositeOperation = 'multiply'
 
     // Applying a mask
     this.#applyMask(ctx, layerCfg.maskImg, 0, 0, w, h)
@@ -242,13 +291,13 @@ export class TailorOutfitPreview {
     h: number,
     textureImg: ImageBitmap,
     tilingOptions: TProcessedTextureTilingOptions,
-    previewOptions: TPreviewOptions
+    textureScale: number
   ) {
     const tW = textureImg.width
     const tH = textureImg.height
 
     let tS = tilingOptions.scale
-    if (previewOptions.textureScale) tS *= previewOptions.textureScale
+    tS *= textureScale
 
     const tA = (Math.PI * tilingOptions.angle) / 180
 
