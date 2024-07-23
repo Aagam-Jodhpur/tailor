@@ -45,7 +45,7 @@ export async function loadMaskImg(src: string): Promise<ImageBitmap> {
 
 export async function createMask(img: ImageBitmap) {
   const { width, height } = img
-  const { canvas, ctx } = createCanvasInMemory(width, height)
+  const { canvas, ctx } = createOffscreenCanvas(width, height)
   ctx.drawImage(img, 0, 0)
   let maskImgData = ctx.getImageData(0, 0, width, height)
   let i = 0
@@ -60,7 +60,7 @@ export async function createMask(img: ImageBitmap) {
 
 export function createMaskImgFromGrayscaleImg(img: TCanvasImage): TCanvasImage {
   const { width, height } = img
-  const { canvas, ctx } = createCanvasInMemory(width, height)
+  const { canvas, ctx } = createOffscreenCanvas(width, height)
   ctx.drawImage(img, 0, 0)
   let maskImgData = ctx.getImageData(0, 0, width, height)
   let i = 0
@@ -73,7 +73,7 @@ export function createMaskImgFromGrayscaleImg(img: TCanvasImage): TCanvasImage {
   return canvas
 }
 
-export function createCanvasInMemory(w = 0, h = 0) {
+export function createOffscreenCanvas(w = 0, h = 0) {
   const canvas = new OffscreenCanvas(w, h)
   const ctx = canvas.getContext('2d')
   return { canvas, ctx }

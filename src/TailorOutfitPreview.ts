@@ -1,36 +1,27 @@
+import { GroupImgCreator } from './workers/GroupImgCreator'
+import { OutfitConfigProcessor } from './workers/OutfitConfigProcessor'
 import { CanvasPainter } from './CanvasPainter/CanvasPainter'
-import { TError } from './TError'
-
-import {
-  createCanvasInMemory,
-  getLayerCfgs,
-  loadImg,
-  loadMaskImg,
-} from './common/utils'
 
 import {
   DEFAULT_PREVIEW_OPTIONS,
-  DEFAULT_TEXTURE_TILING_OPTIONS,
-  TRANSITION_MAP,
-  TIMING_FN_MAP,
   DEFAULT_TEXTURE_SCALE,
+  TIMING_FN_MAP,
+  TRANSITION_MAP,
 } from './common/constants'
 
 import type {
-  TCtx,
   TOutfitConfig,
   TPreviewOptions,
-  TProcessedOutfitBaseConfig,
-  TProcessedOutfitConfig,
-  TProcessedOutfitLayerConfig,
   TProcessedPreviewOptions,
   TProcessedTextureConfig,
-  TProcessedTextureTilingOptions,
   TProcessedTransitionOptions,
   TTextureConfig,
   TTimingFn,
   TTransition,
 } from './common/types'
+
+import { loadImg } from './common/utils'
+import { TError } from './TError'
 
 export class TInitError extends TError {
   constructor(cause?: Error) {
@@ -51,15 +42,17 @@ export class TOpError extends TError {
 export class TailorOutfitPreview {
   private ready: boolean
   private canvasPainter: CanvasPainter | null
-  private outfitCfg: TProcessedOutfitConfig | null
   private previewOptions: TProcessedPreviewOptions
+
+  private outfitConfigProcessor: OutfitConfigProcessor
+  private groupWiseImgCreators: Record<string, GroupImgCreator>
 
   constructor(previewOptions?: TPreviewOptions) {
     try {
       this.ready = false
       this.canvasPainter = null
-      this.outfitCfg = null
       this.previewOptions = this.processPreviewOptions(previewOptions)
+      this.outfitConfigProcessor = new OutfitConfigProcessor()
     } catch (e) {
       if (e instanceof Error) {
         const err = new TInitError(e)
@@ -73,15 +66,29 @@ export class TailorOutfitPreview {
     try {
       if (this.ready) throw new TError(`The class is already initialized`)
 
-      this.outfitCfg = await this.processOutfitConfig(cfg)
+      const outfitCfg =
+        await this.outfitConfigProcessor.processOutfitConfig(cfg)
 
-      const { width, height } = cfg.base
+      this.groupWiseImgCreators = Object.fromEntries(
+        await Promise.all(
+          Object.keys(outfitCfg.groupWiseLayers).map(async groupKey => {
+            const groupImgCreator = new GroupImgCreator()
+            await groupImgCreator.transferCfg(
+              outfitCfg.base,
+              outfitCfg.groupWiseLayers[groupKey]
+            )
+            return [groupKey, groupImgCreator]
+          })
+        )
+      )
+
+      const { width, height } = outfitCfg.base
       this.canvasPainter = new CanvasPainter(width, height, rootEl)
 
       // Draw the outfit base image
       await this.canvasPainter.addRenderItem(
         'base',
-        this.outfitCfg.base.img,
+        outfitCfg.base.img,
         this.previewOptions.transitionOptions
       )
 
@@ -93,44 +100,6 @@ export class TailorOutfitPreview {
         throw err
       } else throw e
     }
-  }
-
-  private async processOutfitConfig(cfg: TOutfitConfig) {
-    // Create outfit base config
-    const base: TProcessedOutfitBaseConfig = {
-      width: cfg.base.width,
-      height: cfg.base.height,
-      img: await loadImg(cfg.base.imgSrc),
-      enhancedImg: await loadImg(cfg.base.enhancedImgSrc),
-    }
-
-    // Create outfit group wise layers
-    const groupWiseLayers: Record<string, TProcessedOutfitLayerConfig[]> = {}
-    for (const groupKey in cfg.groupWiseLayers) {
-      const layerCfgs = cfg.groupWiseLayers[groupKey]
-      groupWiseLayers[groupKey] = await Promise.all(
-        layerCfgs.map(
-          async (layerCfg): Promise<TProcessedOutfitLayerConfig> => {
-            const maskImg = await loadMaskImg(layerCfg.maskImgSrc)
-            const textureTilingOptions: TProcessedTextureTilingOptions = {
-              ...DEFAULT_TEXTURE_TILING_OPTIONS,
-              ...layerCfg.textureTilingOptions,
-            }
-            return {
-              maskImg,
-              textureTilingOptions,
-            }
-          }
-        )
-      )
-    }
-
-    const processedOutfitCfg: TProcessedOutfitConfig = {
-      base,
-      groupWiseLayers,
-    }
-
-    return processedOutfitCfg
   }
 
   private async processTextureConfig(cfg: TTextureConfig) {
@@ -212,34 +181,26 @@ export class TailorOutfitPreview {
 
   async applyTextureOnGroup(groupKey: string, textureCfg: TTextureConfig) {
     try {
-      if (!this.ready)
-        throw new TError(
-          `Tailor is already processing a previous operation. Wait for it to finish.`
-        )
+      if (!this.groupWiseImgCreators)
+        throw new TError('Web workers for group img creation not initialized')
+      if (!this.groupWiseImgCreators.hasOwnProperty(groupKey))
+        throw new TError(`Web worker for group with key ${groupKey} not found`)
       if (!this.canvasPainter)
         throw new TError(`Canvas painter not initialized`)
-      if (!this.outfitCfg) throw new TError(`Outfit config not initialized`)
-
-      this.ready = false
 
       // Process the texture config
       const processedTextureCfg = await this.processTextureConfig(textureCfg)
 
-      // Create group image
-      const layerCfgs = getLayerCfgs(this.outfitCfg, groupKey)
-      const groupImg = await this.#createGroupImg(
-        this.outfitCfg.base,
-        layerCfgs,
-        processedTextureCfg
-      )
+      const groupImg =
+        await this.groupWiseImgCreators[groupKey].createGroupImg(
+          processedTextureCfg
+        )
 
       await this.canvasPainter.addRenderItem(
         groupKey,
         groupImg,
         this.previewOptions.transitionOptions
       )
-
-      this.ready = true
     } catch (e) {
       if (e instanceof Error) {
         const err = new TOpError('applyTextureOnGroup', e)
@@ -251,19 +212,10 @@ export class TailorOutfitPreview {
 
   async removeTextureOnGroup(groupKey: string) {
     try {
-      if (!this.ready)
-        throw new TError(
-          `Tailor is already processing a previous operation. Wait for it to finish.`
-        )
       if (!this.canvasPainter)
         throw new TError(`Canvas painter not initialized`)
-      if (!this.outfitCfg) throw new TError(`Outfit config not initialized`)
-
-      this.ready = false
 
       await this.canvasPainter.removeRenderItem(groupKey)
-
-      this.ready = true
     } catch (e) {
       if (e instanceof Error) {
         const err = new TOpError('removeTextureOnGroup', e)
@@ -271,108 +223,5 @@ export class TailorOutfitPreview {
         throw err
       } else throw e
     }
-  }
-
-  async #createGroupImg(
-    baseCfg: TProcessedOutfitBaseConfig,
-    layerCfgs: TProcessedOutfitLayerConfig[],
-    textureCfg: TProcessedTextureConfig
-  ) {
-    // Create each layer
-    const layerImgs = await Promise.all(
-      layerCfgs.map(
-        async layerCfg =>
-          await this.#createLayerImg(baseCfg, layerCfg, textureCfg)
-      )
-    )
-
-    // Create a temporary off-screen canvas for the group
-    const { w, h } = this.canvasPainter
-    const { canvas, ctx } = createCanvasInMemory(w, h)
-
-    // Compose all layers
-    layerImgs.forEach(layerImg => {
-      ctx.drawImage(layerImg, 0, 0, w, h)
-    })
-
-    return canvas
-  }
-
-  async #createLayerImg(
-    baseCfg: TProcessedOutfitBaseConfig,
-    layerCfg: TProcessedOutfitLayerConfig,
-    textureCfg: TProcessedTextureConfig
-  ) {
-    // Create a temporary off-screen canvas for this layer
-    const { w, h } = this.canvasPainter
-    const { canvas, ctx } = createCanvasInMemory(w, h)
-
-    // Draw the enhanced base image
-    ctx.drawImage(baseCfg.enhancedImg, 0, 0, w, h)
-    ctx.globalCompositeOperation = 'multiply'
-
-    // Tiling the texture
-    this.#tileTexture(
-      ctx,
-      w,
-      h,
-      textureCfg.img,
-      layerCfg.textureTilingOptions,
-      textureCfg.scale
-    )
-
-    // Applying a mask
-    this.#applyMask(ctx, layerCfg.maskImg, 0, 0, w, h)
-
-    return canvas
-  }
-
-  #applyMask(
-    ctx: TCtx,
-    maskImg: ImageBitmap,
-    x: number,
-    y: number,
-    w: number,
-    h: number
-  ) {
-    ctx.save()
-    ctx.globalCompositeOperation = 'destination-atop'
-    ctx.drawImage(maskImg, x, y, w, h)
-    ctx.restore()
-  }
-
-  #tileTexture(
-    ctx: TCtx,
-    w: number,
-    h: number,
-    textureImg: ImageBitmap,
-    tilingOptions: TProcessedTextureTilingOptions,
-    textureScale: number
-  ) {
-    const tW = textureImg.width
-    const tH = textureImg.height
-
-    let tS = tilingOptions.scale
-    tS *= textureScale
-
-    const tA = (Math.PI * tilingOptions.angle) / 180
-
-    const overhang = 0.25
-    const tStartX = -(w / tS) * overhang
-    const tEndX = (w / tS) * (1 + overhang)
-    const tStartY = -(h / tS) * overhang
-    const tEndY = (h / tS) * (1 + overhang)
-
-    ctx.save()
-    ctx.scale(tS, tS)
-    ctx.translate(w / (2 * tS), h / (2 * tS))
-    ctx.rotate(tA)
-    ctx.translate(-w / (2 * tS), -h / (2 * tS))
-    for (let y = tStartY; y < tEndY; y += tH) {
-      for (let x = tStartX; x < tEndX; x += tW) {
-        ctx.drawImage(textureImg, x, y, tW, tH)
-      }
-    }
-    ctx.restore()
   }
 }

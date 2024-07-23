@@ -26,6 +26,7 @@ export interface TProcessedOutfitBaseConfig {
 
 export interface TProcessedOutfitLayerConfig {
   maskImg: ImageBitmap
+  boundingBox: TMaskBoundingBox
   textureTilingOptions: TProcessedTextureTilingOptions
 }
 
@@ -56,6 +57,15 @@ export type TTransition = (
 ) => void
 
 export type TTimingFn = (x: number) => number
+
+export type TWorkerFn = () => void
+
+export interface TMaskBoundingBox {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
 
 //================================<  Public Types  >============================
 
