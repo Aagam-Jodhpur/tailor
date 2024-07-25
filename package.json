@@ -8,6 +8,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "prepare": "husky",
+    "postprepare": "npm run build",
     "build": "rollup -c",
     "dev": "rollup -c -w",
     "test": "jest"
