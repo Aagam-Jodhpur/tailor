@@ -1,5 +1,6 @@
 import { TailorOutfitPreview } from './TailorOutfitPreview'
 import { TTimingFnName, TTransitionName } from './common/constants'
+import type { TError } from './TError'
 import type {
   TOutfitConfig,
   TTextureConfig,
@@ -33,4 +34,5 @@ export type {
   TTextureTilingOptions,
   TPreviewOptions,
   TTransitionOptions,
+  TError,
 }

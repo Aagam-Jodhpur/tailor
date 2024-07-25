@@ -1,6 +1,7 @@
 import { GroupImgCreator } from './workers/GroupImgCreator'
 import { OutfitConfigProcessor } from './workers/OutfitConfigProcessor'
 import { CanvasPainter } from './CanvasPainter/CanvasPainter'
+import { TError } from './TError'
 
 import {
   DEFAULT_PREVIEW_OPTIONS,
@@ -21,7 +22,6 @@ import type {
 } from './common/types'
 
 import { loadImg } from './common/utils'
-import { TError } from './TError'
 
 export class TInitError extends TError {
   constructor(cause?: Error) {
