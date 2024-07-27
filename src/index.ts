@@ -21,12 +21,13 @@ export async function createOutfitPreview(
   return outfitPreview
 }
 
+export { TailorOutfitPreview, TError }
+
 // Exporting enums
 export { TTransitionName, TTimingFnName }
 
 // Exporting all public types
 export type {
-  TailorOutfitPreview,
   TOutfitConfig,
   TTextureConfig,
   TOutfitBaseConfig,
@@ -34,5 +35,4 @@ export type {
   TTextureTilingOptions,
   TPreviewOptions,
   TTransitionOptions,
-  TError,
 }
