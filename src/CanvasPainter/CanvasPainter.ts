@@ -10,6 +10,7 @@ import type {
 export class CanvasPainter {
   private terminated: boolean
   private readonly rootEl: HTMLElement
+  private readonly rootElResizeObserver: ResizeObserver
   private readonly canvas: HTMLCanvasElement
   private readonly ctx: TCtx
   private readonly renderMap: Map<string, RenderItem>
@@ -27,13 +28,11 @@ export class CanvasPainter {
     this.canvas = canvas
     this.ctx = ctx
 
-    // Size the canvas appropriately
-    this.#resizeCanvas()
-
     // Resize handler
-    window.addEventListener('resize', () => {
-      this.#resizeCanvas()
+    this.rootElResizeObserver = new ResizeObserver(_ => {
+      this.resizeCanvas()
     })
+    this.rootElResizeObserver.observe(this.rootEl)
 
     // Add the canvas to the DOM
     this.rootEl.append(canvas)
@@ -45,7 +44,7 @@ export class CanvasPainter {
     this.#initLoop()
   }
 
-  #resizeCanvas() {
+  private resizeCanvas() {
     if (this.terminated) return
     const { w, h } = this
     const { clientWidth, clientHeight } = this.rootEl
@@ -125,6 +124,7 @@ export class CanvasPainter {
 
   destroy() {
     this.canvas.remove()
+    this.rootElResizeObserver.disconnect()
     this.terminated = true
   }
 }
