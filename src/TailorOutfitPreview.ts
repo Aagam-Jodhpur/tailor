@@ -39,8 +39,16 @@ export class TOpError extends TError {
   }
 }
 
+export class TClassTerminatedError extends TError {
+  constructor() {
+    const msg = 'This class has been terminated'
+    super(msg)
+  }
+}
+
 export class TailorOutfitPreview {
   private ready: boolean
+  private terminated: boolean
   private canvasPainter: CanvasPainter | null
   private previewOptions: TProcessedPreviewOptions
 
@@ -50,6 +58,7 @@ export class TailorOutfitPreview {
   constructor(previewOptions?: TPreviewOptions) {
     try {
       this.ready = false
+      this.terminated = false
       this.canvasPainter = null
       this.previewOptions = this.processPreviewOptions(previewOptions)
       this.outfitConfigProcessor = new OutfitConfigProcessor()
@@ -64,6 +73,7 @@ export class TailorOutfitPreview {
 
   async init(cfg: TOutfitConfig, rootEl: HTMLElement) {
     try {
+      if (this.terminated) throw new TClassTerminatedError()
       if (this.ready) throw new TError(`The class is already initialized`)
 
       const outfitCfg =
@@ -173,6 +183,7 @@ export class TailorOutfitPreview {
   }
 
   setPreviewOptions(options: TPreviewOptions) {
+    if (this.terminated) throw new TClassTerminatedError()
     this.previewOptions = this.processPreviewOptions(
       options,
       this.previewOptions
@@ -181,6 +192,7 @@ export class TailorOutfitPreview {
 
   async applyTextureOnGroup(groupKey: string, textureCfg: TTextureConfig) {
     try {
+      if (this.terminated) throw new TClassTerminatedError()
       if (!this.groupWiseImgCreators)
         throw new TError('Web workers for group img creation not initialized')
       if (!this.groupWiseImgCreators.hasOwnProperty(groupKey))
@@ -212,6 +224,7 @@ export class TailorOutfitPreview {
 
   async removeTextureOnGroup(groupKey: string) {
     try {
+      if (this.terminated) throw new TClassTerminatedError()
       if (!this.canvasPainter)
         throw new TError(`Canvas painter not initialized`)
 
@@ -223,5 +236,16 @@ export class TailorOutfitPreview {
         throw err
       } else throw e
     }
+  }
+
+  destroy() {
+    if (this.terminated) throw new TClassTerminatedError()
+
+    if (this.canvasPainter) this.canvasPainter.destroy()
+    this.ready = false
+    this.terminated = true
+    this.outfitConfigProcessor.destroy()
+    for (let key in this.groupWiseImgCreators)
+      this.groupWiseImgCreators[key].destroy()
   }
 }

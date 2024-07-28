@@ -4,6 +4,7 @@ import { TWorkerFn } from '../common/types'
 export class WorkerExecutor {
   name: string
   protected busy: boolean
+  private readonly workerUrl: string
   protected worker: Worker
 
   constructor(name: string, workerFn: TWorkerFn) {
@@ -11,8 +12,8 @@ export class WorkerExecutor {
     this.busy = false
 
     try {
-      const url = this.createWorkerURLFromFn(workerFn)
-      this.worker = new Worker(url)
+      this.workerUrl = this.createWorkerURLFromFn(workerFn)
+      this.worker = new Worker(this.workerUrl)
     } catch (e) {
       if (e instanceof Error)
         throw new TWorkerExecutorConstructionError(this.name, e)
@@ -61,6 +62,12 @@ export class WorkerExecutor {
 
       this.worker.postMessage(data, { transfer })
     })
+  }
+
+  destroy() {
+    this.worker.terminate()
+    URL.revokeObjectURL(this.workerUrl)
+    this.busy = true
   }
 }
 

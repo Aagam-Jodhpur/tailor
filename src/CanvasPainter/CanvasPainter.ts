@@ -8,6 +8,7 @@ import type {
 } from '../common/types'
 
 export class CanvasPainter {
+  private terminated: boolean
   private readonly rootEl: HTMLElement
   private readonly canvas: HTMLCanvasElement
   private readonly ctx: TCtx
@@ -16,6 +17,7 @@ export class CanvasPainter {
   readonly h: number
 
   constructor(width: number, height: number, rootEl: HTMLElement) {
+    this.terminated = false
     this.rootEl = rootEl
     this.w = width
     this.h = height
@@ -44,6 +46,7 @@ export class CanvasPainter {
   }
 
   #resizeCanvas() {
+    if (this.terminated) return
     const { w, h } = this
     const { clientWidth, clientHeight } = this.rootEl
     const dims = maximiseWithinBounds(w, h, clientWidth, clientHeight)
@@ -52,7 +55,7 @@ export class CanvasPainter {
   }
 
   #initLoop() {
-    window.requestAnimationFrame(() => this.#loop())
+    if (!this.terminated) window.requestAnimationFrame(() => this.#loop())
   }
 
   #loop() {
@@ -68,12 +71,13 @@ export class CanvasPainter {
     this.renderMap.forEach(item => item.loop(this.ctx, w, h))
   }
 
-  addRenderItem(
+  async addRenderItem(
     key: string,
     img: TCanvasImage,
     transitionOptions: TProcessedTransitionOptions
   ) {
-    return new Promise<void>((resolve, reject) => {
+    if (this.terminated) return
+    await new Promise((resolve, reject) => {
       const itemExists = this.renderMap.has(key)
       const item =
         this.renderMap.get(key) ?? new RenderItem(img, transitionOptions)
@@ -93,8 +97,9 @@ export class CanvasPainter {
     })
   }
 
-  removeRenderItem(key: string) {
-    return new Promise<void>((resolve, reject) => {
+  async removeRenderItem(key: string) {
+    if (this.terminated) return
+    await new Promise((resolve, reject) => {
       const item = this.renderMap.get(key)
       if (item) {
         item.addEventListener(
@@ -116,5 +121,10 @@ export class CanvasPainter {
         )
       }
     })
+  }
+
+  destroy() {
+    this.canvas.remove()
+    this.terminated = true
   }
 }
